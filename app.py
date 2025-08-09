@@ -1,34 +1,26 @@
+import os
 from flask import Flask, request, jsonify
-from sentence_transformers import SentenceTransformer, util
-
-# Load model once at startup
-model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+from transformers import pipeline
 
 app = Flask(__name__)
 
-@app.route("/similarity", methods=["POST"])
-def similarity():
-    data = request.get_json()
-
-    sentence1 = data.get("sentence1")
-    sentence2 = data.get("sentence2")
-
-    if not sentence1 or not sentence2:
-        return jsonify({"error": "Both sentence1 and sentence2 are required"}), 400
-
-    embeddings1 = model.encode(sentence1, convert_to_tensor=True)
-    embeddings2 = model.encode(sentence2, convert_to_tensor=True)
-    similarity_score = util.cos_sim(embeddings1, embeddings2).item()
-
-    return jsonify({
-        "sentence1": sentence1,
-        "sentence2": sentence2,
-        "similarity_score": round(similarity_score, 4)
-    })
+# Load model only once at startup to save memory
+print("Loading model...")
+transcriber = pipeline("automatic-speech-recognition", model="openai/whisper-small", device=-1)  # CPU
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Kannada Sentence Similarity API is running!"
+    return jsonify({"message": "Whisper API is running on Render!"})
+
+@app.route("/transcribe", methods=["POST"])
+def transcribe_audio():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    audio_file = request.files["file"]
+    result = transcriber(audio_file.read())
+    return jsonify({"transcript": result["text"]})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))  # Use Render's PORT
+    app.run(host="0.0.0.0", port=port)
